@@ -26,7 +26,7 @@ SQL
 
 # --- apply each new migration, atomically --------------------------------
 shopt -s nullglob
-migrations=(db/migrations/*.sql)
+migrations=("$MIGRATIONS_DIR"/*.sql)
 applied_count=0
 
 for file in "${migrations[@]}"; do

@@ -5,6 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT_DIR"
 
+ENV_FILE="${ENV_FILE:-.env}"
+MIGRATIONS_DIR="${MIGRATIONS_DIR:-db/migrations}"
+
 if [[ ! -f .env ]]; then
     echo "ERROR: .env not found in $ROOT_DIR (cp .env.example .env)" >&2
     exit 1
