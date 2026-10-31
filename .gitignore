@@ -2,3 +2,4 @@
 dbdata/
 pgdata/
 .DS_Store
+copy.sh

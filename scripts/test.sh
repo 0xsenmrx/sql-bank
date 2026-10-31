@@ -12,10 +12,18 @@ cd "$SCRIPT_DIR/.."
 TEMP_DIR="$(mktemp -d)"
 TEST_DB="bank_test"
 
-# 2. Create a test .env file BEFORE sourcing _common.sh
+# 2. Guarantee cleanup, using host psql just like reset.sh
+cleanup() {
+    rm -rf "$TEMP_DIR"
+    psql -X -q -h "$PGHOST" -p "$PGPORT" -U "$POSTGRES_USER" -d postgres \
+         -c "DROP DATABASE IF EXISTS $TEST_DB;" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+# 3. Create a test .env file BEFORE sourcing _common.sh
 cat > "$TEMP_DIR/.env.test" <<EOF
 POSTGRES_USER=bank
-POSTGRES_PASSWORD=$(grep POSTGRES_PASSWORD .env | cut -d= -f2)
+POSTGRES_PASSWORD=$(grep '^POSTGRES_PASSWORD=' .env | cut -d= -f2-)
 POSTGRES_DB=$TEST_DB
 PGHOST=localhost
 PGPORT=5432
@@ -23,27 +31,19 @@ APP_ENV=dev
 DEV_DATABASE=$TEST_DB
 EOF
 
-# 3. Export the test variables, THEN source _common.sh
+# 4. Export the test variables, THEN source _common.sh
 export ENV_FILE="$TEMP_DIR/.env.test"
 export MIGRATIONS_DIR="$TEMP_DIR/migrations"
 mkdir -p "$MIGRATIONS_DIR"
 
 source "$SCRIPT_DIR/_common.sh"
 
-# 4. Safety Assertion
+# 5. Safety Assertion
 if [[ "$POSTGRES_DB" != "$TEST_DB" ]]; then
     echo "CRITICAL ERROR: test.sh is pointing at database '$POSTGRES_DB', expected '$TEST_DB'." >&2
     echo "Aborting to prevent destruction of the dev database!" >&2
     exit 1
 fi
-
-# 5. Guarantee cleanup, using host psql just like reset.sh
-cleanup() {
-    rm -rf "$TEMP_DIR"
-    psql -X -q -h "$PGHOST" -p "$PGPORT" -U "$POSTGRES_USER" -d postgres \
-         -c "DROP DATABASE IF EXISTS $TEST_DB;" >/dev/null 2>&1 || true
-}
-trap cleanup EXIT
 
 # Helper to count rows in the test database
 count_migrations() {
@@ -133,5 +133,24 @@ fi
 echo "✅ PASS: Broken migration left no partial changes."
 
 echo "========================================"
-echo "🎉 ALL MODULE 0 TESTS PASSED!"
+echo "Preparing database for constraint tests"
 echo "========================================"
+
+# 1. Delete the dummy files from the previous tests
+rm -rf "$TEMP_DIR/migrations"
+
+# 2. Point MIGRATIONS_DIR back to the REAL migrations
+export MIGRATIONS_DIR="db/migrations"
+
+# 3. Reset bank_test using the real migrations and seeds
+"$SCRIPT_DIR/reset.sh" --yes --seed
+
+echo "========================================"
+echo "Running constraint tests against bank_test"
+echo "========================================"
+psql -X -q -v ON_ERROR_STOP=1 -h "$PGHOST" -p "$PGPORT" -U "$POSTGRES_USER" -d "$TEST_DB" -f db/tests/constraints.sql
+
+echo "========================================"
+echo "🎉 ALL MODULE 0 AND CONSTRAINT TESTS PASSED!"
+echo "========================================"
+
