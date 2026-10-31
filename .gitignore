@@ -1,0 +1,4 @@
+.env
+dbdata/
+pgdata/
+.DS_Store
