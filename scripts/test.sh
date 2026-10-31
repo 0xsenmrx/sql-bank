@@ -6,31 +6,49 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/_common.sh"
+cd "$SCRIPT_DIR/.."
 
 # 1. Set up a temporary environment
 TEMP_DIR="$(mktemp -d)"
+TEST_DB="bank_test"
+
+# 2. Create a test .env file BEFORE sourcing _common.sh
+cat > "$TEMP_DIR/.env.test" <<EOF
+POSTGRES_USER=bank
+POSTGRES_PASSWORD=$(grep POSTGRES_PASSWORD .env | cut -d= -f2)
+POSTGRES_DB=$TEST_DB
+PGHOST=localhost
+PGPORT=5432
+APP_ENV=dev
+DEV_DATABASE=$TEST_DB
+EOF
+
+# 3. Export the test variables, THEN source _common.sh
+export ENV_FILE="$TEMP_DIR/.env.test"
 export MIGRATIONS_DIR="$TEMP_DIR/migrations"
 mkdir -p "$MIGRATIONS_DIR"
 
-# 2. Create a test .env so we don't touch the dev DB
-cat > "$TEMP_DIR/.env.test" <<EOF
-POSTGRES_USER=$POSTGRES_USER
-POSTGRES_PASSWORD=$POSTGRES_PASSWORD
-POSTGRES_DB=bank_test
-PGHOST=$PGHOST
-PGPORT=$PGPORT
-APP_ENV=dev
-DEV_DATABASE=bank_test
-EOF
-export ENV_FILE="$TEMP_DIR/.env.test"
+source "$SCRIPT_DIR/_common.sh"
 
-# 3. TRAP: This guarantees cleanup even if a test fails and exits early
-trap 'rm -rf "$TEMP_DIR"; docker compose exec -T db psql -U bank -d postgres -c "DROP DATABASE IF EXISTS bank_test;" >/dev/null 2>&1 || true' EXIT
+# 4. Safety Assertion
+if [[ "$POSTGRES_DB" != "$TEST_DB" ]]; then
+    echo "CRITICAL ERROR: test.sh is pointing at database '$POSTGRES_DB', expected '$TEST_DB'." >&2
+    echo "Aborting to prevent destruction of the dev database!" >&2
+    exit 1
+fi
+
+# 5. Guarantee cleanup, using host psql just like reset.sh
+cleanup() {
+    rm -rf "$TEMP_DIR"
+    psql -X -q -h "$PGHOST" -p "$PGPORT" -U "$POSTGRES_USER" -d postgres \
+         -c "DROP DATABASE IF EXISTS $TEST_DB;" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
 
 # Helper to count rows in the test database
 count_migrations() {
-    PGPASSWORD="$POSTGRES_PASSWORD" psql -X -q -tA -h "$PGHOST" -p "$PGPORT" -U "$POSTGRES_USER" -d bank_test <<< "SELECT count(*) FROM schema_migrations;"
+    psql -X -q -tA -h "$PGHOST" -p "$PGPORT" -U "$POSTGRES_USER" -d "$TEST_DB" \
+         <<< "SELECT count(*) FROM schema_migrations;"
 }
 
 echo "========================================"
@@ -48,7 +66,6 @@ fi
 echo "========================================"
 echo "TEST 2: Apply migrations, run twice"
 echo "========================================"
-# Write a dummy migration to the TEMP folder
 echo "CREATE TABLE test_mod0 (id serial primary key);" > "$MIGRATIONS_DIR/0001_mod0_test.sql"
 
 "$SCRIPT_DIR/migrate.sh" >/dev/null
@@ -58,7 +75,6 @@ if [[ "$COUNT" -ne 1 ]]; then
     exit 1
 fi
 
-# Run again, should skip
 OUTPUT=$("$SCRIPT_DIR/migrate.sh")
 if [[ "$OUTPUT" != *"skip     0001_mod0_test.sql"* ]]; then
     echo "❌ FAIL: Second run did not skip."
@@ -84,7 +100,6 @@ else
     exit 1
 fi
 
-# Revert the edit
 echo "CREATE TABLE test_mod0 (id serial primary key);" > "$MIGRATIONS_DIR/0001_mod0_test.sql"
 "$SCRIPT_DIR/migrate.sh" >/dev/null
 
@@ -103,14 +118,14 @@ if [[ "$EXIT_CODE" -eq 0 ]]; then
     exit 1
 fi
 
-# Check that 0002 is NOT in schema_migrations, and the table does not exist
 COUNT=$(count_migrations)
 if [[ "$COUNT" -ne 1 ]]; then
     echo "❌ FAIL: Expected 1 migration after failure, found $COUNT."
     exit 1
 fi
 
-TABLE_EXISTS=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -X -q -tA -h "$PGHOST" -p "$PGPORT" -U "$POSTGRES_USER" -d bank_test <<< "SELECT count(*) FROM pg_tables WHERE tablename = 'broken_table';")
+TABLE_EXISTS=$(psql -X -q -tA -h "$PGHOST" -p "$PGPORT" -U "$POSTGRES_USER" -d "$TEST_DB" \
+               <<< "SELECT count(*) FROM pg_tables WHERE tablename = 'broken_table';")
 if [[ "$TABLE_EXISTS" -ne 0 ]]; then
     echo "❌ FAIL: broken_table was created despite the syntax error!"
     exit 1
