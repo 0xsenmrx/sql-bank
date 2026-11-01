@@ -87,7 +87,7 @@ Reasoning for each choice: `docs/decisions/0002-schema-and-constraints.md`.
 | 2. Reading data and NULL | Done |
 | 3. Aggregation | Done |
 | 4. Joins | Done |
-| 5. Subqueries and CTEs | Not started |
+| 5. Subqueries and CTEs | Done |
 | 6. Changing data and transactions | Not started |
 | 7. Window functions | Not started |
 | 8. Schema design | Not started |
