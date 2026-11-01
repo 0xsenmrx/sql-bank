@@ -28,7 +28,8 @@ scripts/          migrate.sh, reset.sh, test.sh, _common.sh (shared setup)
 db/migrations/    numbered, append-only schema changes
 db/seeds/         sample data
 db/queries/       practice queries, one file per module
-db/tests/         SQL tests (constraints.sql)
+db/tests/         SQL tests (constraints.sql, transfer.sql)
+db/demos/         manual demos (not part of the automated test run)
 docs/             decisions/ (why), mistakes.md (what I got wrong), sql-notes.md (cheat sheet)
 ```
 
@@ -38,12 +39,15 @@ docs/             decisions/ (why), mistakes.md (what I got wrong), sql-notes.md
 | --- | --- | --- |
 | `scripts/migrate.sh` | Applies new files from `db/migrations` in filename order, each in one transaction, and records a SHA-256 checksum per file. | Fails loudly if an applied file was edited. |
 | `scripts/reset.sh` | Drops and recreates the database, then runs `migrate.sh` (and loads seeds with `--seed`). | Refuses unless `APP_ENV=dev`, `POSTGRES_DB` equals `DEV_DATABASE`, and `PGHOST` is local. Asks for confirmation unless `--yes`. |
-| `scripts/test.sh` | Runs the migration-tool checks, then the constraint tests, in a separate `bank_test` database. | Never touches the dev database: it asserts the target is `bank_test` before anything destructive, and drops `bank_test` when it finishes. |
+| `scripts/test.sh` | Runs migrations, constraints, query smoke, and transfer tests in `bank_test`. | Never touches the dev database: it asserts the target is `bank_test` before anything destructive, and drops `bank_test` when it finishes. |
 
 ## Schema
 
 ```text
 customers 1 ---- * accounts 1 ---- * transactions
+customers * ---- * accounts (via account_holders)
+transactions has a nullable transfer_id (uuid) linking debits and credits.
+A PL/pgSQL transfer_funds() function performs atomic transfers.
 ```
 
 - `customers`: unique email (case-insensitive), non-empty name.
@@ -59,7 +63,7 @@ Reasoning for each choice: `docs/decisions/0002-schema-and-constraints.md`.
   migration is committed, never edit it; add a new file.
 - Migration files must not contain their own `BEGIN`, `COMMIT` or `ROLLBACK`; the
   script wraps each file in a transaction.
-- Name every constraint and index: `uq_<table>_<column>`, `chk_<table>_<rule>`.
+- Name every constraint and index: `uq_<table>_<column>`, `chk_<table>_<rule>`, `pk_<table>`, `fk_<table>_<column>`.
 - Money is `numeric(19,4)`, never `float`. Times are `timestamptz`.
 - Seeds look rows up by natural keys (such as email), never by hard-coded ids.
 - Tests run inside a transaction that ends with `ROLLBACK`, and a failed check raises
@@ -76,7 +80,8 @@ Reasoning for each choice: `docs/decisions/0002-schema-and-constraints.md`.
 4. a broken migration leaves no partial changes,
 5. every constraint in `db/tests/constraints.sql` rejects bad data (NOT NULL, UNIQUE,
    CHECK, FOREIGN KEY, ON DELETE RESTRICT, DEFAULT) and accepts the boundary cases.
-6. every query file in `db/queries` runs without a syntax error against the seeded `bank_test` database.
+6. every query file in `db/queries` runs without a syntax error.
+7. every transfer test in `db/tests/transfer.sql` passes (normal, insufficient, atomicity, guards, invariants).
 
 ## Progress
 
@@ -88,7 +93,7 @@ Reasoning for each choice: `docs/decisions/0002-schema-and-constraints.md`.
 | 3. Aggregation | Done |
 | 4. Joins | Done |
 | 5. Subqueries and CTEs | Done |
-| 6. Changing data and transactions | Not started |
+| 6. Changing data and transactions | Done |
 | 7. Window functions | Not started |
 | 8. Schema design | Not started |
 | 9. Indexes and EXPLAIN | Not started |

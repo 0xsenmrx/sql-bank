@@ -17,17 +17,16 @@
 
 ## 4. The `ON DELETE RESTRICT` Misunderstanding
 **What happened:** I thought `ON DELETE RESTRICT` and `NO ACTION` were basically the same thing, and I didn't understand why my placement of it on a non-foreign-key column caused a syntax error.
-**The lesson:** `RESTRICT` blocks a delete *immediately*. `NO ACTION` (the default) blocks it at the *end of the transaction*, which allows for deferred checks. Also, `ON DELETE` only belongs on foreign key columns.
+**The lesson:** `NO ACTION` checks at the end of the statement by default, and at the end of the transaction only if the constraint is `DEFERRABLE INITIALLY DEFERRED`.
 
 ## 5. Hardcoded IDs in Seeds
 **What happened:** I hardcoded `customer_id = 1` in my accounts seed file.
 **The mistake:** If the database sequence changes, or if I delete Alice from the seed file, `1` might point to the wrong person.
 **The fix:** I learned how to use a **subquery**: `(SELECT id FROM customers WHERE email = 'alice@example.com')`. This tells the database to find the correct ID dynamically.
 
-## 6. Editing an Applied Migration
-**What happened:** I fixed a typo in `0001_create_customers.sql` after I had already run it.
-**The mistake:** Migrations are append-only. If you edit a file that has already been applied, your database and your files drift apart. My `migrate.sh` caught this because it stores a SHA-256 checksum.
-**The fix:** Reverted the edit, and created a new migration file (`0004_...`) to make the change.
+## 6. Editing a Migration In Place Before the First Commit
+**What happened:** Before the first commit, I added a constraint to `0001_create_customers.sql`, then dropped and re-added it in the same file. It worked only because `reset.sh` rebuilds the database every time.
+**The rule:** Once a migration is committed, every schema change is a new numbered file (`0004_add_phone.sql`), never an edit to the original.
 
 ## 7. The Dangerous `rm` Variable
 **What happened:** In `test.sh`, I did `rm -f "$MIGRATIONS_DIR"/*.sql` while the variable pointed to my temp folder, and then immediately changed the variable to point to `db/migrations`.
@@ -44,3 +43,12 @@ I learned that `now()` returns the timestamp of the *start of the transaction*. 
 
 ## 10. UNKNOWN is not FALSE
 I learned that `NULL` comparisons return `UNKNOWN`, not `FALSE`. In a `WHERE` clause, both `UNKNOWN` and `FALSE` are dropped, so they look the same. But `NOT UNKNOWN` is still `UNKNOWN`! So `WHERE NOT (phone = '555-0101')` will *still* skip the rows where `phone` is `NULL`.
+
+## 11. WHEN OTHERS swallows the FAIL signal
+I put `RAISE EXCEPTION 'FAIL'` inside a `BEGIN ... EXCEPTION WHEN OTHERS` block. The handler caught my own failure signal. The fix is to set a boolean flag in the handler, then check the flag *outside* the block and raise there.
+
+## 12. NULL slipping past an IF guard
+I wrote `IF p_amount <= 0` to reject invalid amounts. When `p_amount` is `NULL`, the comparison evaluates to `NULL`, so the guard didn't fire. I must write `IF p_amount IS NULL OR p_amount <= 0`.
+
+## 13. psql variables don't work inside $$ blocks
+I put `:from_id` inside a `DO $$ ... $$` block expecting psql to substitute it. It didn't. The fix is to wrap the function call in the plain SQL layer: `SELECT transfer_funds(:from_id, :to_id, :amount);`.

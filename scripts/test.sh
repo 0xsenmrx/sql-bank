@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Runs the Module 0 proof checks.
+# Runs all proof checks.
 # Uses isolated temporary folders so it never touches real dev data.
 
 set -euo pipefail
@@ -166,6 +166,10 @@ else
 fi
 
 echo "========================================"
-echo "🎉 ALL MODULE 0 AND CONSTRAINT TESTS PASSED!"
+echo "Running transfer tests against bank_test"
 echo "========================================"
+psql -X -q -v ON_ERROR_STOP=1 -h "$PGHOST" -p "$PGPORT" -U "$POSTGRES_USER" -d "$TEST_DB" -f db/tests/transfer.sql
 
+echo "========================================"
+echo "🎉 ALL MODULE 0, CONSTRAINT, QUERY, AND TRANSFER TESTS PASSED!"
+echo "========================================"
