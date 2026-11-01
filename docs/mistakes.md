@@ -38,3 +38,9 @@
 **What happened:** I added a `UNIQUE` constraint on `email`, but I also created a `UNIQUE INDEX` on `LOWER(email)`.
 **The mistake:** The `LOWER(email)` index already enforces exact uniqueness (because if `Alice@` and `alice@` are duplicates, then `alice@` and `alice@` are definitely duplicates). The plain `UNIQUE` constraint was a waste of disk space and slowed down inserts.
 **The fix:** Dropped the plain `UNIQUE` constraint.
+
+## 9. `now()` vs `clock_timestamp()`
+I learned that `now()` returns the timestamp of the *start of the transaction*. If I insert 100 rows in one transaction, they all get the exact same `created_at` time. If I need the actual time each row was inserted (wall-clock time), I must use `clock_timestamp()`. Also, using `id DESC` as a tie-breaker works because IDs follow insertion order, but it is not strictly commit order under concurrency.
+
+## 10. UNKNOWN is not FALSE
+I learned that `NULL` comparisons return `UNKNOWN`, not `FALSE`. In a `WHERE` clause, both `UNKNOWN` and `FALSE` are dropped, so they look the same. But `NOT UNKNOWN` is still `UNKNOWN`! So `WHERE NOT (phone = '555-0101')` will *still* skip the rows where `phone` is `NULL`.
