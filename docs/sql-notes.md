@@ -62,3 +62,19 @@ If you group by a primary key (like `c.id`), you can select other columns from t
 ## NOT IN vs NOT EXISTS
 * `NOT IN` fails because `NOT IN (1, 2, NULL)` evaluates to `UNKNOWN`. It filters out **all** rows.
 * `NOT EXISTS` checks for the presence of a row, not the value. `NOT EXISTS (SELECT 1 ...)` correctly returns `TRUE` when no row is found, regardless of `NULL` values.
+
+## Window Functions: Default Frame (Peers)
+`SUM(x) OVER (ORDER BY col)` uses the default frame `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`. "CURRENT ROW" in `RANGE` mode means "current **peer group**" (all rows with the same `ORDER BY` value). So if two rows share the same `col`, both see the running sum after the whole peer group. Adding a tie-breaker (`, id`) switches the frame to `ROWS` mode, where each row advances one at a time.
+
+## RANK vs `DENSE_RANK` vs `ROW_NUMBER`
+All three need an `ORDER BY`. On a tie:
+- `ROW_NUMBER` assigns unique numbers (arbitrary unless you add a tie-breaker).
+- `RANK` gives tied rows the same number, then skips (1, 1, 3).
+- `DENSE_RANK` gives tied rows the same number, then does not skip (1, 1, 2).
+Always add `, id` to the `ORDER BY` to make the tie deterministic.
+
+## LAG and LEAD
+`LAG(col)` returns the previous row's `col` value within the partition. The first row of each partition returns `NULL` (there is no previous). `LEAD(col)` returns the next row's value, and the last row returns `NULL`.
+
+## Window Functions Run After WHERE and GROUP BY
+The logical order is `FROM → WHERE → GROUP BY → HAVING → WINDOW → SELECT → ORDER BY → LIMIT`. Because window functions run after `WHERE` and `GROUP BY`, you cannot filter on a window result (e.g., `WHERE rn = 1`) in the same query. Wrap the window query in a CTE or subquery, then filter in the outer query.
