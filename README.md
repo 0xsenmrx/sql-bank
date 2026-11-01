@@ -29,7 +29,7 @@ db/migrations/    numbered, append-only schema changes
 db/seeds/         sample data
 db/queries/       practice queries, one file per module
 db/tests/         SQL tests (constraints.sql)
-docs/             decisions/ (why), mistakes.md (what I got wrong)
+docs/             decisions/ (why), mistakes.md (what I got wrong), sql-notes.md (cheat sheet)
 ```
 
 ## Scripts
@@ -76,6 +76,7 @@ Reasoning for each choice: `docs/decisions/0002-schema-and-constraints.md`.
 4. a broken migration leaves no partial changes,
 5. every constraint in `db/tests/constraints.sql` rejects bad data (NOT NULL, UNIQUE,
    CHECK, FOREIGN KEY, ON DELETE RESTRICT, DEFAULT) and accepts the boundary cases.
+6. every query file in `db/queries` runs without a syntax error against the seeded `bank_test` database.
 
 ## Progress
 
@@ -83,8 +84,8 @@ Reasoning for each choice: `docs/decisions/0002-schema-and-constraints.md`.
 | --- | --- |
 | 0. Environment and repository | Done |
 | 1. Tables and constraints | Done |
-| 2. Reading data and NULL | In progress |
-| 3. Aggregation | Not started |
+| 2. Reading data and NULL | Done |
+| 3. Aggregation | Done |
 | 4. Joins | Not started |
 | 5. Subqueries and CTEs | Not started |
 | 6. Changing data and transactions | Not started |
