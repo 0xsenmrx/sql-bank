@@ -169,4 +169,87 @@ EXCEPTION WHEN OTHERS THEN
     RAISE EXCEPTION '❌ FAIL: Valid currency rejected. Error: %', SQLERRM;
 END $$;
 
+-- 9. ACCOUNT HOLDERS TESTS
+DO $$
+DECLARE
+    v_cust_id bigint;
+    v_acc_id bigint;
+    v_holder_id bigint;
+    v_constraint_name text;
+BEGIN
+    -- Get the fixture customer we created in section 1
+    SELECT id INTO v_cust_id FROM customers WHERE email = 'test-fixture@example.com';
+
+    -- Create a BRAND NEW account with no transactions so nothing else blocks our delete
+    INSERT INTO accounts (customer_id, currency, balance)
+    VALUES (v_cust_id, 'GBP', 0.00) RETURNING id INTO v_acc_id;
+
+    -- Create a second customer to be the holder
+    INSERT INTO customers (email, full_name) VALUES ('holder-fixture@example.com', 'Holder Fixture') RETURNING id INTO v_holder_id;
+
+    -- 1. Valid insert
+    INSERT INTO account_holders (account_id, customer_id) VALUES (v_acc_id, v_holder_id);
+    RAISE NOTICE '✅ PASS: Valid account_holder accepted.';
+
+    -- 2. Duplicate pair
+    BEGIN
+        INSERT INTO account_holders (account_id, customer_id) VALUES (v_acc_id, v_holder_id);
+        RAISE EXCEPTION '❌ FAIL: Duplicate account_holder allowed.';
+    EXCEPTION WHEN unique_violation THEN
+        RAISE NOTICE '✅ PASS: Duplicate account_holder rejected.';
+    END;
+
+    -- 3. Orphan account (expects fk_account_holders_account)
+    BEGIN
+        INSERT INTO account_holders (account_id, customer_id) VALUES (99999, v_holder_id);
+        RAISE EXCEPTION '❌ FAIL: Orphan account holder allowed.';
+    EXCEPTION WHEN foreign_key_violation THEN
+        GET STACKED DIAGNOSTICS v_constraint_name = CONSTRAINT_NAME;
+        IF v_constraint_name = 'fk_account_holders_account' THEN
+            RAISE NOTICE '✅ PASS: Orphan account holder rejected by correct constraint.';
+        ELSE
+            RAISE EXCEPTION '❌ FAIL: Wrong constraint fired: %', v_constraint_name;
+        END IF;
+    END;
+
+    -- 4. Orphan customer (expects fk_account_holders_customer)
+    BEGIN
+        INSERT INTO account_holders (account_id, customer_id) VALUES (v_acc_id, 99999);
+        RAISE EXCEPTION '❌ FAIL: Orphan customer holder allowed.';
+    EXCEPTION WHEN foreign_key_violation THEN
+        GET STACKED DIAGNOSTICS v_constraint_name = CONSTRAINT_NAME;
+        IF v_constraint_name = 'fk_account_holders_customer' THEN
+            RAISE NOTICE '✅ PASS: Orphan customer holder rejected by correct constraint.';
+        ELSE
+            RAISE EXCEPTION '❌ FAIL: Wrong constraint fired: %', v_constraint_name;
+        END IF;
+    END;
+
+    -- 5. Delete restriction on account
+    BEGIN
+        DELETE FROM accounts WHERE id = v_acc_id;
+        RAISE EXCEPTION '❌ FAIL: Deleted account with holder row.';
+    EXCEPTION WHEN foreign_key_violation THEN
+        GET STACKED DIAGNOSTICS v_constraint_name = CONSTRAINT_NAME;
+        IF v_constraint_name = 'fk_account_holders_account' THEN
+            RAISE NOTICE '✅ PASS: Cannot delete account with holder row.';
+        ELSE
+            RAISE EXCEPTION '❌ FAIL: Wrong constraint fired: %', v_constraint_name;
+        END IF;
+    END;
+
+    -- 6. Delete restriction on customer (the missing mirror test)
+    BEGIN
+        DELETE FROM customers WHERE id = v_holder_id;
+        RAISE EXCEPTION '❌ FAIL: Deleted customer with holder row.';
+    EXCEPTION WHEN foreign_key_violation THEN
+        GET STACKED DIAGNOSTICS v_constraint_name = CONSTRAINT_NAME;
+        IF v_constraint_name = 'fk_account_holders_customer' THEN
+            RAISE NOTICE '✅ PASS: Cannot delete customer with holder row.';
+        ELSE
+            RAISE EXCEPTION '❌ FAIL: Wrong constraint fired: %', v_constraint_name;
+        END IF;
+    END;
+END $$;
+
 ROLLBACK;
