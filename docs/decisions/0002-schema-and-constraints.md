@@ -22,7 +22,7 @@ bad rows are rejected even if an application or a manual query tries to write th
 
 ## Why RESTRICT
 
-We chose `RESTRICT` because it checks the constraint immediately when the `DELETE` command is executed. `NO ACTION` (the default) checks at the end of the transaction, and if declared `DEFERRABLE`, it allows you to delete a parent and insert a new child in the same transaction. We want to prevent deleting a customer who still has accounts, period. We didn't use `CASCADE` because cascading deletes could silently erase transaction history.
+We chose `RESTRICT` because it checks the constraint immediately when the `DELETE` command is executed. `NO ACTION` (the default) checks at the end of the statement, and at the end of the transaction only if `DEFERRABLE INITIALLY DEFERRED`. We want to prevent deleting a customer who still has accounts, period. We didn't use `CASCADE` because cascading deletes could silently erase transaction history.
 
 ## Why four decimal places
 
