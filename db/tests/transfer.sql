@@ -10,30 +10,29 @@ CREATE TEMP TABLE initial_sum AS SELECT SUM(balance) AS total FROM accounts;
 -- 1. NORMAL TRANSFER
 -- ==========================================
 DO $$
-BEGIN
-    PERFORM transfer_funds(
-        (SELECT id FROM accounts WHERE customer_id = (SELECT id FROM customers WHERE email = 'alice@example.com') AND currency = 'USD'),
-        (SELECT id FROM accounts WHERE customer_id = (SELECT id FROM customers WHERE email = 'bob@example.com') AND currency = 'USD'),
-        50.00
-    );
-    RAISE NOTICE '✅ PASS: Normal transfer executed.';
-END $$;
-
--- Verify exact movement
-DO $$
 DECLARE
     v_alice_id bigint := (SELECT id FROM accounts WHERE customer_id = (SELECT id FROM customers WHERE email = 'alice@example.com') AND currency = 'USD');
     v_bob_id bigint := (SELECT id FROM accounts WHERE customer_id = (SELECT id FROM customers WHERE email = 'bob@example.com') AND currency = 'USD');
-    v_alice_bal numeric;
-    v_bob_bal numeric;
+    v_alice_before numeric;
+    v_bob_before numeric;
+    v_alice_after numeric;
+    v_bob_after numeric;
 BEGIN
-    SELECT balance INTO v_alice_bal FROM accounts WHERE id = v_alice_id;
-    SELECT balance INTO v_bob_bal FROM accounts WHERE id = v_bob_id;
+    SELECT balance INTO v_alice_before FROM accounts WHERE id = v_alice_id;
+    SELECT balance INTO v_bob_before FROM accounts WHERE id = v_bob_id;
 
-    IF v_alice_bal = 900.00 AND v_bob_bal = 300.00 THEN
-        RAISE NOTICE '✅ PASS: Exact amount moved (Alice: 900, Bob: 300).';
+    PERFORM transfer_funds(v_alice_id, v_bob_id, 50.00);
+
+    SELECT balance INTO v_alice_after FROM accounts WHERE id = v_alice_id;
+    SELECT balance INTO v_bob_after FROM accounts WHERE id = v_bob_id;
+
+    IF v_alice_after = v_alice_before - 50.00
+       AND v_bob_after = v_bob_before + 50.00 THEN
+        RAISE NOTICE '✅ PASS: Exact amount moved (Alice: % -> %, Bob: % -> %)',
+            v_alice_before, v_alice_after, v_bob_before, v_bob_after;
     ELSE
-        RAISE EXCEPTION '❌ FAIL: Balances wrong (Alice: %, Bob: %)', v_alice_bal, v_bob_bal;
+        RAISE EXCEPTION '❌ FAIL: Balances wrong (Alice: % -> %, Bob: % -> %)',
+            v_alice_before, v_alice_after, v_bob_before, v_bob_after;
     END IF;
 END $$;
 
