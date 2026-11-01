@@ -50,4 +50,15 @@ If you group by a primary key (like `c.id`), you can select other columns from t
 ## Migration backfill
  **Migration backfill:** When adding a new relationship table, you must backfill existing data (`INSERT INTO ... SELECT ...`) so you don't lose ownership. However, on a fresh reset, the tables are empty when the migration runs, which is why the seeds must also populate the table explicitly.
 
+## CTEs: Inlined vs Materialized
+* In Postgres 12+, a CTE referenced only once is **inlined** (merged into the main query) by default.
+* A CTE referenced multiple times is **materialized** (executed once and stored in memory).
+* You can force materialization with `WITH cte AS MATERIALIZED (...)`.
 
+## ORDER BY and NULLs
+* `ORDER BY total_balance DESC` sorts the output column (which was COALESCEd to 0).
+* `ORDER BY at.total_balance DESC` sorts the *raw* column. In Postgres, `NULL` is considered larger than any value, so customers with no accounts would appear **first**.
+
+## NOT IN vs NOT EXISTS
+* `NOT IN` fails because `NOT IN (1, 2, NULL)` evaluates to `UNKNOWN`. It filters out **all** rows.
+* `NOT EXISTS` checks for the presence of a row, not the value. `NOT EXISTS (SELECT 1 ...)` correctly returns `TRUE` when no row is found, regardless of `NULL` values.
