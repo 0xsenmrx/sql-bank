@@ -8,6 +8,7 @@ cd "$ROOT_DIR"
 # 1. Define the variables with defaults
 ENV_FILE="${ENV_FILE:-.env}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-db/migrations}"
+QUERIES_DIR="${QUERIES_DIR:-db/queries}"
 
 # 2. Check the variable, not ".env"
 if [[ ! -f "$ENV_FILE" ]]; then

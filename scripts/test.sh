@@ -151,6 +151,21 @@ echo "========================================"
 psql -X -q -v ON_ERROR_STOP=1 -h "$PGHOST" -p "$PGPORT" -U "$POSTGRES_USER" -d "$TEST_DB" -f db/tests/constraints.sql
 
 echo "========================================"
+echo "Running query smoke tests"
+echo "========================================"
+shopt -s nullglob
+queries=("$QUERIES_DIR"/*.sql)
+if [[ ${#queries[@]} -eq 0 ]]; then
+    echo "No query files found in db/queries/ (skipping)"
+else
+    for q in "${queries[@]}"; do
+        echo "running  $(basename "$q")"
+        psql -X -q -v ON_ERROR_STOP=1 -h "$PGHOST" -p "$PGPORT" -U "$POSTGRES_USER" -d "$TEST_DB" -f "$q" >/dev/null
+    done
+    echo "✅ PASS: All query files executed successfully."
+fi
+
+echo "========================================"
 echo "🎉 ALL MODULE 0 AND CONSTRAINT TESTS PASSED!"
 echo "========================================"
 
